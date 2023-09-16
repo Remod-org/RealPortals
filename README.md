@@ -1,9 +1,17 @@
 # RealPortals
+Create and manage portals using a portal gun in addition to the portal command.  I suppose these are no more real than any other portal, but we are using the newer Rust-defined portals rather than our own custom object.
 
-## Command
+A visible and audible effect will play on entrance and exit.  We disable the opening door sounds of the Rust portal door.
 
- - portal -- Has subcommands as show below
- If typed by itself with no arguments, it will show details about the portal in front of the user
+Portals can be customized to provide server access, or access to your friends or Rust teammates.  They can be further customized to be either two-way (default) or one-way, with entrance and exit that can be swapped as needed.
+
+Each portal pair can have a custom name, although that name is not currently used.
+
+Why Garry's toolgun?  Why not?
+
+## Commands (console or /chat)
+
+ - portal -- Has subcommands as shown below.  If typed by itself with no arguments, it will show details about the portal in front of the user.
 
  - portal name {NEWNAME} -- Assign a name to the portal
  - portal all {true/false} -- Set access to all players
@@ -14,9 +22,21 @@
 
 ## The way of the gun
 
- 1. If a player has a toolgun and the realportals.gun permission. They can manage portals.
+ 1. If a player has a toolgun and the realportals.gun permission, they can manage portals.
  2. If a player does not have a toolgun, but they do have the permission, they can deploy one using 'portal tool'.
- 3. To create a portal, first go to the location of the portal entrance, or first location.
+ 3. To create a portal
+    - First, go to the location of the portal entrance, or first location.
+    - Equip the tool gun.
+    - Hold down your use key and press the primary fire button on your mouse.
+    - Next, move to the location of the portal exit, or second location.
+    - Equip the tool gun (again).
+    - Hold down your use key and press the primary fire button on your mouse.
+ 4. To destroy a portal you own (unless you are an admin in which case you can destroy any portal)
+    - First, go to the location of the portal entrance OR exit.
+    - Be sure not to get too close or you will be teleported.
+    - Look at the portal door.
+    - Hold down your use key and press the secondary fire button on your mouse.
+ 5. Your toolgun will be removed on connect or disconnect.  Simply request a new one when you reconnect using 'portal tool'.  This is done to prevent abusing the privilege and harvesting all the tools a player might create to harvest resources...
 
 ## Configuration
 ```json
