@@ -7,7 +7,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RealPortals", "RFC1920", "1.0.3")]
+    [Info("RealPortals", "RFC1920", "1.0.4")]
     [Description("Define and manage portals using a tool gun, with permission of course.")]
     internal class RealPortals : RustPlugin
     {
@@ -60,6 +60,28 @@ namespace Oxide.Plugins
                 return;
             }
             RespawnPortals();
+        }
+        protected override void LoadDefaultMessages()
+        {
+            lang.RegisterMessages(new Dictionary<string, string>
+            {
+                ["addedto"] = "A portal gun has been added to {0}",
+                ["alreadyin"] = "You already have a portal gun in {0}",
+                ["issued"] = "You have already been issued a portal gun today",
+                ["backpack"] = "your backpack",
+                ["belt"] = "your belt",
+                ["main"] = "your main inventory",
+                ["noroom"] = "You have no room to store a portal gun",
+                ["tooquick"] = "You must wait {0} seconds between radar bursts.",
+                ["notafriend"] = "You must be friends with the owner of this portal!",
+                ["notaffiliated"] = "You are not affiliated with the owner of this portal!",
+                ["exitportal"] = "Exit portal {0}",
+                ["entranceportal"] = "Entrance portal {0}",
+                ["exitonly"] = "This is an exit only portal door!",
+                ["private"] = "This is a private portal!",
+                ["portaldescr"] = "Portal {0}\n Name: {1}\n Public: {2}\n BiDirectional: {3}\n Owner: {4}\n Entrance: {5} {6}\n Exit: {7} {8}\n",
+                ["notauthorized"] = "You don't have permission to do that !!"
+            }, this);
         }
 
         private void OnNewSave() => newsave = true;
@@ -152,13 +174,13 @@ namespace Oxide.Plugins
                         KeyValuePair<int, PortalPair> query = portals.FirstOrDefault(x => x.Value.Entrance == target.net.ID);
                         if (query.Key > 0)
                         {
-                            SendReply(player, $"Entrance portal {query.Value.name}");
+                            Message(player.IPlayer, "entranceportal", query.Value.name);
                             return;
                         }
                         query = portals.FirstOrDefault(x => x.Value.Exit == target.net.ID);
                         if (query.Key > 0)
                         {
-                            SendReply(player, $"Exit portal {query.Value.name}");
+                            Message(player.IPlayer, "exitportal", query.Value.name);
                             return;
                         }
                         // Not one of ours...
@@ -180,19 +202,19 @@ namespace Oxide.Plugins
                 if (use.net.ID == target.Value.Exit && !target.Value.Bidirectional)
                 {
                     // One-way portal - !BiDirectional
-                    SendReply(player, "This is an exit only portal door!");
+                    Message(player.IPlayer, "exitonly");
                     return true;
                 }
-                if (!target.Value.IsServer && !target.Value.Friends)
+                if (!target.Value.IsServer && !target.Value.Friends && target.Value.ownerid != player.userID)
                 {
                     // Not server-shared, and friends are not allowed.
-                    SendReply(player, "This is a private portal!");
+                    Message(player.IPlayer, "private");
                     return true;
                 }
                 if (!target.Value.IsServer && target.Value.Friends && !IsFriend(player.userID, target.Value.ownerid))
                 {
                     // Not server-shared, and friend check failed.  Too bad, so sad.
-                    SendReply(player, "You must be friends with the owner of this portal!");
+                    Message(player.IPlayer, "notafriend");
                     return true;
                 }
                 // Play effect if this is one of our portals, but only if entrance and exit have already been defined.
@@ -205,6 +227,72 @@ namespace Oxide.Plugins
         #region commands
         private void cmdPortal(IPlayer iplayer, string command, string[] args)
         {
+            BasePlayer player = iplayer.Object as BasePlayer;
+
+            Puts(string.Join(",", args));
+            if (args.Length == 1 && args[0] == "tool")
+            {
+                if (!permission.UserHasPermission(iplayer.Id, permGun)) return;
+
+                // Issue a toolgun
+                ItemContainer backpack = null;
+                if (player.inventory.containerBelt.FindItemsByItemID(1803831286).FirstOrDefault() != null)
+                {
+                    Message(iplayer, "alreadyin", "belt");
+                    return;
+                }
+                if (player.inventory.containerMain.FindItemsByItemID(1803831286).FirstOrDefault() != null)
+                {
+                    Message(iplayer, "alreadyin", "main");
+                    return;
+                }
+                if (Backpacks)
+                {
+                    backpack = Backpacks?.Call("API_GetBackpackContainer", ulong.Parse(iplayer.Id)) as ItemContainer;
+                    if (backpack != null)
+                    {
+                        for (int i = 0; i < backpack.itemList.Count; i++)
+                        {
+                            if (backpack.itemList[i].info.itemid == 1803831286)
+                            {
+                                Message(iplayer, "alreadyin", "backpack");
+                                return;
+                            }
+                        }
+                    }
+                }
+
+                if (!player.inventory.containerBelt.IsFull())
+                {
+                    Item item = ItemManager.CreateByItemID(1803831286, 1, 0);
+                    item.MoveToContainer(player.inventory.containerBelt);
+                    issuedTools.Add(player.userID, (uint)item.uid.Value);
+                    player.inventory.containerBelt.MarkDirty();
+                    Message(iplayer, "addedto", "belt");
+                    return;
+                }
+                if (!player.inventory.containerMain.IsFull())
+                {
+                    Item item = ItemManager.CreateByItemID(1803831286, 1, 0);
+                    item.MoveToContainer(player.inventory.containerMain);
+                    issuedTools.Add(player.userID, (uint)item.uid.Value);
+                    player.inventory.containerMain.MarkDirty();
+                    Message(iplayer, "addedto", "main");
+                    return;
+                }
+                if (backpack?.IsFull() == false)
+                {
+                    Item item = ItemManager.CreateByItemID(1803831286, 1, 0);
+                    item.MoveToContainer(backpack);
+                    issuedTools.Add(player.userID, (uint)item.uid.Value);
+                    backpack.MarkDirty();
+                    Message(iplayer, "addedto", "backpack");
+                    return;
+                }
+                Message(iplayer, "noroom");
+                return;
+            }
+
             BaseEntity target = RaycastAll<BaseEntity>((iplayer.Object as BasePlayer).eyes.HeadRay()) as BaseEntity;
             KeyValuePair<int, PortalPair> query = new KeyValuePair<int, PortalPair>();
             if (target != null && target is BasePortal)
@@ -212,71 +300,8 @@ namespace Oxide.Plugins
                 query = portals.FirstOrDefault(x => x.Value.Entrance == target.net.ID || x.Value.Exit == target.net.ID);
             }
 
-            BasePlayer player = iplayer.Object as BasePlayer;
             if (query.Key > 0)
             {
-                if (args.Length == 1 && args[0] == "tool")
-                {
-                    if (permission.UserHasPermission(iplayer.Id, permGun)) return;
-
-                    // Issue a toolgun
-                    ItemContainer backpack = null;
-                    if (player.inventory.containerBelt.FindItemsByItemID(1803831286) != null)
-                    {
-                        Message(iplayer, "alreadyin", Lang("belt"));
-                        return;
-                    }
-                    if (player.inventory.containerMain.FindItemsByItemID(1803831286) != null)
-                    {
-                        Message(iplayer, "alreadyin", Lang("main"));
-                        return;
-                    }
-                    if (Backpacks)
-                    {
-                        backpack = Backpacks?.Call("API_GetBackpackContainer", ulong.Parse(iplayer.Id)) as ItemContainer;
-                        if (backpack != null)
-                        {
-                            for (int i = 0; i < backpack.itemList.Count; i++)
-                            {
-                                if (backpack.itemList[i].info.itemid == 1803831286)
-                                {
-                                    Message(iplayer, "alreadyin", Lang("backpack"));
-                                    return;
-                                }
-                            }
-                        }
-                    }
-
-                    if (!player.inventory.containerBelt.IsFull())
-                    {
-                        Item item = ItemManager.CreateByItemID(1803831286, 1, 0);
-                        item.MoveToContainer(player.inventory.containerBelt);
-                        issuedTools.Add(player.userID, (uint)item.uid.Value);
-                        player.inventory.containerBelt.MarkDirty();
-                        Message(iplayer, "addedto", Lang("belt"));
-                        return;
-                    }
-                    if (!player.inventory.containerMain.IsFull())
-                    {
-                        Item item = ItemManager.CreateByItemID(1803831286, 1, 0);
-                        item.MoveToContainer(player.inventory.containerMain);
-                        issuedTools.Add(player.userID, (uint)item.uid.Value);
-                        player.inventory.containerMain.MarkDirty();
-                        Message(iplayer, "addedto", Lang("main"));
-                        return;
-                    }
-                    if (backpack?.IsFull() == false)
-                    {
-                        Item item = ItemManager.CreateByItemID(1803831286, 1, 0);
-                        item.MoveToContainer(backpack);
-                        issuedTools.Add(player.userID, (uint)item.uid.Value);
-                        backpack.MarkDirty();
-                        Message(iplayer, "addedto", Lang("backpack"));
-                        return;
-                    }
-                    Message(iplayer, "noroom");
-                    return;
-                }
                 if (args.Length == 2)
                 {
                     switch (args[0])
@@ -312,15 +337,18 @@ namespace Oxide.Plugins
                     }
                     SaveData();
                 }
+
                 BaseNetworkable A = BaseNetworkable.serverEntities.Find(query.Value.Entrance);
                 BaseNetworkable B = BaseNetworkable.serverEntities.Find(query.Value.Exit);
                 if (A != null && B != null)
                 {
-                    string message = $"Portal {query.Key}\n Name: {query.Value.name}\n Public: {query.Value.IsServer}\n"
-                        + $" BiDirectional: {query.Value.Bidirectional}\n Owner: {BasePlayer.Find(query.Value.ownerid.ToString())?.displayName}\n"
-                        + $" Entrance: {PositionToGrid(A.transform.position)} ({A.transform.position})\n"
-                        + $" Exit: {PositionToGrid(B.transform.position)} ({B.transform.position})\n";
-                    Message(iplayer, message);
+                    string owner = BasePlayer.Find(query.Value.ownerid.ToString())?.displayName;
+                    Message(iplayer, "portaldescr",
+                        query.Key.ToString(), query.Value.name, query.Value.IsServer.ToString(),
+                        query.Value.Bidirectional.ToString(), owner,
+                        PositionToGrid(A.transform.position), A.transform.position,
+                        PositionToGrid(B.transform.position), B.transform.position
+                    );
                 }
             }
         }
@@ -336,7 +364,7 @@ namespace Oxide.Plugins
                 if (!player.IsAdmin && !IsFriend(player.userID, target.Value.ownerid))
                 {
                     // Only allow admin, owner, or a friend to remove this portal.
-                    SendReply(player, "You are not affiliated with the owner of this portal!");
+                    Message(player.IPlayer, "notaffiliated");
                     return;
                 }
 
@@ -354,13 +382,18 @@ namespace Oxide.Plugins
         {
             foreach (KeyValuePair<int, PortalPair> portalPair in new Dictionary<int, PortalPair>(portals))
             {
-                BaseEntity newPortal = GameManager.server.CreateEntity(PortalPrefab, portalPair.Value.enloc, portalPair.Value.enrot, true);
-                newPortal.Spawn();
-                portals[portalPair.Key].Entrance = newPortal.net.ID;
+                BaseEntity entrance = GameManager.server.CreateEntity(PortalPrefab, portalPair.Value.enloc, portalPair.Value.enrot, true);
+                entrance.Spawn();
+                portals[portalPair.Key].Entrance = entrance.net.ID;
 
-                newPortal = GameManager.server.CreateEntity(PortalPrefab, portalPair.Value.exloc, portalPair.Value.exrot, true);
-                newPortal.Spawn();
-                portals[portalPair.Key].Exit = newPortal.net.ID;
+                BaseEntity exit = GameManager.server.CreateEntity(PortalPrefab, portalPair.Value.exloc, portalPair.Value.exrot, true);
+                exit.Spawn();
+                portals[portalPair.Key].Exit = exit.net.ID;
+
+                (exit as BasePortal).targetPortal = entrance as BasePortal;
+                (exit as BasePortal).transitionSoundEffect = new GameObjectRef();
+                (entrance as BasePortal).targetPortal = exit as BasePortal;
+                (entrance as BasePortal).transitionSoundEffect = new GameObjectRef();
             }
             SaveData();
         }
