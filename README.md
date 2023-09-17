@@ -9,6 +9,8 @@ Each portal pair can have a custom name, although that name is not currently use
 
 Why Garry's toolgun?  Why not?
 
+![](https://i.imgur.com/nlDDw62.jpeg)
+
 ## Commands (console or /chat)
 
  - portal -- Has subcommands as shown below.  If typed by itself with no arguments, it will show details about the portal in front of the user.
