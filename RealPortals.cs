@@ -29,7 +29,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RealPortals", "RFC1920", "1.0.4")]
+    [Info("RealPortals", "RFC1920", "1.0.5")]
     [Description("Define and manage portals using a tool gun, with permission of course.")]
     internal class RealPortals : RustPlugin
     {
@@ -117,6 +117,11 @@ namespace Oxide.Plugins
                 BasePortal exit = BaseNetworkable.serverEntities.Find(pair.Exit) as BasePortal;
                 entrance?.Kill();
                 exit?.Kill();
+            }
+            foreach (BasePlayer player in BasePlayer.activePlayerList)
+            {
+                // Tool cleanup
+                OnPlayerDisconnected(player);
             }
         }
 
