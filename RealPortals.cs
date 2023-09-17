@@ -29,7 +29,7 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RealPortals", "RFC1920", "1.0.5")]
+    [Info("RealPortals", "RFC1920", "1.0.6")]
     [Description("Define and manage portals using a tool gun, with permission of course.")]
     internal class RealPortals : RustPlugin
     {
@@ -431,7 +431,7 @@ namespace Oxide.Plugins
             Quaternion rot = player.transform.rotation;
 
             int currentId = UnityEngine.Random.Range(0, 2147483647);
-            KeyValuePair<int, PortalPair> current = portals.FirstOrDefault(x => x.Value.Exit.Value == 0);
+            KeyValuePair<int, PortalPair> current = portals.FirstOrDefault(x => x.Value.Exit.Value == 0 && x.Value.ownerid == player.userID);
             bool isExit = false;
             if (current.Key > 0)
             {
