@@ -7,10 +7,11 @@ using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
-    [Info("RealPortals", "RFC1920", "1.0.2")]
+    [Info("RealPortals", "RFC1920", "1.0.3")]
     [Description("Define and manage portals using a tool gun, with permission of course.")]
     internal class RealPortals : RustPlugin
     {
+        #region vars
         [PluginReference]
         private readonly Plugin Friends, Clans, Backpacks, GridAPI;
 
@@ -20,12 +21,7 @@ namespace Oxide.Plugins
         private Dictionary<int, PortalPair> portals = new Dictionary<int, PortalPair>();
         private Dictionary<ulong, uint> issuedTools = new Dictionary<ulong, uint>();
         const string PortalPrefab = "assets/prefabs/missions/portal/bunker_door_portal.prefab";
-
-        #region Message
-        private string Lang(string key, string id = null, params object[] args) => string.Format(lang.GetMessage(key, this, id), args);
-        private void Message(IPlayer player, string key, params object[] args) => player.Message(Lang(key, player.Id, args));
-        #endregion
-
+        private bool newsave;
         public class PortalPair
         {
             public int id;
@@ -36,8 +32,19 @@ namespace Oxide.Plugins
             public bool Friends;
             public NetworkableId Entrance;
             public NetworkableId Exit;
+            public Vector3 enloc;
+            public Quaternion enrot;
+            public Vector3 exloc;
+            public Quaternion exrot;
         }
+        #endregion vars
 
+        #region Message
+        private string Lang(string key, string id = null, params object[] args) => string.Format(lang.GetMessage(key, this, id), args);
+        private void Message(IPlayer player, string key, params object[] args) => player.Message(Lang(key, player.Id, args));
+        #endregion
+
+        #region hooks
         private void OnServerInitialized()
         {
             permission.RegisterPermission(permUse, this);
@@ -45,7 +52,17 @@ namespace Oxide.Plugins
             AddCovalenceCommand("portal", "cmdPortal");
             LoadData();
             LoadConfigVariables();
+            if (newsave)
+            {
+                portals = new Dictionary<int, PortalPair>();
+                SaveData();
+                newsave = false;
+                return;
+            }
+            RespawnPortals();
         }
+
+        private void OnNewSave() => newsave = true;
 
         private void Unload()
         {
@@ -150,29 +167,42 @@ namespace Oxide.Plugins
             }
         }
 
-        private static bool GetBoolValue(string value)
+        private object OnPortalUse(BasePlayer player, BasePortal use)
         {
-            if (value == null)
+            KeyValuePair<int, PortalPair> target = portals.FirstOrDefault(x => x.Value.Entrance == use.net.ID || x.Value.Exit == use.net.ID);
+            if (target.Key > 0 && use.targetID.Value > 0)
             {
-                return false;
-            }
-                // TODO:
-
-            value = value.Trim().ToLower();
-            switch (value)
-            {
-                case "on":
-                case "true":
-                case "yes":
-                case "1":
-                case "t":
-                case "y":
+                if (configData.requirePermission && !permission.UserHasPermission(player.UserIDString, permUse))
+                {
+                    // User lacks permUse permission
                     return true;
-                default:
-                    return false;
+                }
+                if (use.net.ID == target.Value.Exit && !target.Value.Bidirectional)
+                {
+                    // One-way portal - !BiDirectional
+                    SendReply(player, "This is an exit only portal door!");
+                    return true;
+                }
+                if (!target.Value.IsServer && !target.Value.Friends)
+                {
+                    // Not server-shared, and friends are not allowed.
+                    SendReply(player, "This is a private portal!");
+                    return true;
+                }
+                if (!target.Value.IsServer && target.Value.Friends && !IsFriend(player.userID, target.Value.ownerid))
+                {
+                    // Not server-shared, and friend check failed.  Too bad, so sad.
+                    SendReply(player, "You must be friends with the owner of this portal!");
+                    return true;
+                }
+                // Play effect if this is one of our portals, but only if entrance and exit have already been defined.
+                Effect.server.Run("assets/prefabs/npc/sam_site_turret/effects/tube_launch.prefab", player.transform.position, Vector3.up, null, false);
             }
+            return null;
         }
+        #endregion hooks
 
+        #region commands
         private void cmdPortal(IPlayer iplayer, string command, string[] args)
         {
             BaseEntity target = RaycastAll<BaseEntity>((iplayer.Object as BasePlayer).eyes.HeadRay()) as BaseEntity;
@@ -253,8 +283,16 @@ namespace Oxide.Plugins
                     {
                         case "swap":
                             NetworkableId newexit = query.Value.Entrance;
+                            Vector3 newexitv = query.Value.enloc;
+                            Quaternion newexitr = query.Value.enrot;
+
                             query.Value.Exit = query.Value.Entrance;
+                            query.Value.exloc = query.Value.enloc;
+                            query.Value.exrot = query.Value.enrot;
+
                             query.Value.Entrance = newexit;
+                            query.Value.enloc = newexitv;
+                            query.Value.enrot = newexitr;
                             break;
                         case "name":
                             query.Value.name = args[1];
@@ -286,7 +324,9 @@ namespace Oxide.Plugins
                 }
             }
         }
+        #endregion commands
 
+        #region functions
         private void CleanupPortal(BasePortal EntOrExit, BasePlayer player)
         {
             // Remove portal definition as well as both entrance and exit objects, regardless of which of the pair was sent.
@@ -310,38 +350,19 @@ namespace Oxide.Plugins
             }
         }
 
-        private object OnPortalUse(BasePlayer player, BasePortal use)
+        private void RespawnPortals()
         {
-            KeyValuePair<int, PortalPair> target = portals.FirstOrDefault(x => x.Value.Entrance == use.net.ID || x.Value.Exit == use.net.ID);
-            if (target.Key > 0 && use.targetID.Value > 0)
+            foreach (KeyValuePair<int, PortalPair> portalPair in new Dictionary<int, PortalPair>(portals))
             {
-                if (configData.requirePermission && !permission.UserHasPermission(player.UserIDString, permUse))
-                {
-                    // User lacks permUse permission
-                    return true;
-                }
-                if (use.net.ID == target.Value.Exit && !target.Value.Bidirectional)
-                {
-                    // One-way portal - !BiDirectional
-                    SendReply(player, "This is an exit only portal door!");
-                    return true;
-                }
-                if (!target.Value.IsServer && !target.Value.Friends)
-                {
-                    // Not server-shared, and friends are not allowed.
-                    SendReply(player, "This is a private portal!");
-                    return true;
-                }
-                if (!target.Value.IsServer && target.Value.Friends && !IsFriend(player.userID, target.Value.ownerid))
-                {
-                    // Not server-shared, and friend check failed.  Too bad, so sad.
-                    SendReply(player, "You must be friends with the owner of this portal!");
-                    return true;
-                }
-                // Play effect if this is one of our portals, but only if entrance and exit have already been defined.
-                Effect.server.Run("assets/prefabs/npc/sam_site_turret/effects/tube_launch.prefab", player.transform.position, Vector3.up, null, false);
+                BaseEntity newPortal = GameManager.server.CreateEntity(PortalPrefab, portalPair.Value.enloc, portalPair.Value.enrot, true);
+                newPortal.Spawn();
+                portals[portalPair.Key].Entrance = newPortal.net.ID;
+
+                newPortal = GameManager.server.CreateEntity(PortalPrefab, portalPair.Value.exloc, portalPair.Value.exrot, true);
+                newPortal.Spawn();
+                portals[portalPair.Key].Exit = newPortal.net.ID;
             }
-            return null;
+            SaveData();
         }
 
         private void SpawnPortal(BasePlayer player)
@@ -385,9 +406,13 @@ namespace Oxide.Plugins
             {
                 case false:
                     current.Value.Entrance = newPortal.net.ID;
+                    current.Value.enloc = newPortal.transform.position;
+                    current.Value.enrot = newPortal.transform.rotation;
                     break;
                 case true:
                     current.Value.Exit = newPortal.net.ID;
+                    current.Value.exloc = newPortal.transform.position;
+                    current.Value.exrot = newPortal.transform.rotation;
                     BasePortal entrance = BaseNetworkable.serverEntities.Find(current.Value.Entrance) as BasePortal;
                     BasePortal exit = BaseNetworkable.serverEntities.Find(current.Value.Exit) as BasePortal;
                     exit.targetPortal = entrance;
@@ -396,7 +421,9 @@ namespace Oxide.Plugins
             }
             SaveData();
         }
+        #endregion functions
 
+        #region data
         private void LoadData()
         {
             portals = Interface.Oxide.DataFileSystem.ReadObject<Dictionary<int, PortalPair>>(Name + "/portals");
@@ -406,7 +433,9 @@ namespace Oxide.Plugins
         {
             Interface.Oxide.DataFileSystem.WriteObject(Name + "/portals", portals);
         }
+        #endregion data
 
+        #region config
         private class ConfigData
         {
             public bool requirePermission;
@@ -443,8 +472,32 @@ namespace Oxide.Plugins
         {
             Config.WriteObject(config, true);
         }
+        #endregion config
 
         #region Utils
+        private static bool GetBoolValue(string value)
+        {
+            if (value == null)
+            {
+                return false;
+            }
+                // TODO:
+
+            value = value.Trim().ToLower();
+            switch (value)
+            {
+                case "on":
+                case "true":
+                case "yes":
+                case "1":
+                case "t":
+                case "y":
+                    return true;
+                default:
+                    return false;
+            }
+        }
+
         private object RaycastAll<T>(Ray ray) where T : BaseEntity
         {
             RaycastHit[] hits = Physics.RaycastAll(ray);
