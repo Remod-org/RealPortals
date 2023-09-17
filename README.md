@@ -39,7 +39,7 @@ Why Garry's toolgun?  Why not?
     - Look at the portal door.
     - Hold down your use key and press the secondary fire button on your mouse.
  5. Firing the gun at a portal will tell you the name and whether it is an entrance or exit.  For more info, use the portal command with no arguments.
- 6. Your toolgun will be removed on connect or disconnect.  Simply request a new one when you reconnect using 'portal tool'.  This is done to prevent abusing the privilege and harvesting all the tools a player might create to harvest resources...
+ 6. Your toolgun will be removed on connect or disconnect.  Simply request a new one when you reconnect using 'portal tool'.  This is done to prevent abusing the privilege and harvesting all the tools a player might create for resources...
 
 ## Configuration
 ```json
