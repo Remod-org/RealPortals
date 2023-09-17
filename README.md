@@ -66,3 +66,7 @@ Why Garry's toolgun?  Why not?
  - realportals.use -- Required to use plugin-defined portals
  - realportals.gun -- Required to manage portals including the issuance of a portal gun
 
+## TODO
+
+ - Add a snapto feature to allow the door to fit in with building parts or even public utilities (with permission).
+
